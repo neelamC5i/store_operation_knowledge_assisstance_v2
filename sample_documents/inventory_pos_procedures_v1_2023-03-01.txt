@@ -1,0 +1,7 @@
+Inventory and POS Procedures
+
+Daily Cash Reconciliation
+At the end of each shift, the register drawer must be counted twice and reconciled against the POS system report before submission to the shift supervisor.
+
+Inventory Receiving
+All incoming stock must be scanned into the inventory system within 24 hours of delivery, and discrepancies must be reported to the Inventory Manager the same day.

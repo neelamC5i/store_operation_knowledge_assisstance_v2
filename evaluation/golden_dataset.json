@@ -1,0 +1,192 @@
+{
+  "version": "1.0",
+  "description": "Golden dataset for the Store Operations Knowledge Assistant, covering the 9 categories required by PRD §53 (2 questions per category). Run against the KB seeded by scripts/seed_sample_documents.py.",
+  "questions": [
+    {
+      "id": "Q-A1",
+      "test_category": "A",
+      "category_label": "answerable",
+      "question": "What is the current return policy?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v2",
+      "notes": "Must cite the current (v2) version, not the superseded v1."
+    },
+    {
+      "id": "Q-A2",
+      "test_category": "A",
+      "category_label": "answerable",
+      "question": "How long do employees have to scan incoming inventory into the system?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Inventory and POS Procedures",
+      "expected_version": "v1",
+      "notes": "Straightforward factual lookup."
+    },
+    {
+      "id": "Q-B1",
+      "test_category": "B",
+      "category_label": "procedures",
+      "question": "How many times must the register drawer be counted at the end of a shift?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Inventory and POS Procedures",
+      "expected_version": "v1",
+      "notes": "Procedures sub-corpus."
+    },
+    {
+      "id": "Q-B2",
+      "test_category": "B",
+      "category_label": "procedures",
+      "question": "Can an opened item be exchanged under the current return policy?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v2",
+      "notes": "Procedures sub-corpus; only true under v2, not v1."
+    },
+    {
+      "id": "Q-C1",
+      "test_category": "C",
+      "category_label": "promotions",
+      "question": "What is the current beverage promotion?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Store Promotions",
+      "expected_version": "v1",
+      "notes": "Promotions sub-corpus."
+    },
+    {
+      "id": "Q-C2",
+      "test_category": "C",
+      "category_label": "promotions",
+      "question": "Can I combine a manufacturer coupon with a store discount?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Store Promotions",
+      "expected_version": "v1",
+      "notes": "Promotions sub-corpus."
+    },
+    {
+      "id": "Q-D1",
+      "test_category": "D",
+      "category_label": "safety",
+      "question": "What must employees do before handling open food items?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Store Safety Rules",
+      "expected_version": "v1",
+      "notes": "Safety sub-corpus."
+    },
+    {
+      "id": "Q-D2",
+      "test_category": "D",
+      "category_label": "safety",
+      "question": "Who is allowed to operate the box compactor?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Store Safety Rules",
+      "expected_version": "v1",
+      "notes": "Safety sub-corpus."
+    },
+    {
+      "id": "Q-E1",
+      "test_category": "E",
+      "category_label": "superseded_policy",
+      "question": "What is the current return policy?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v2",
+      "notes": "Superseded-policy check: v1 (14 days) exists but must never be cited for a 'current' question; only v2 (30 days) is valid."
+    },
+    {
+      "id": "Q-E2",
+      "test_category": "E",
+      "category_label": "superseded_policy",
+      "question": "Are clearance items returnable under the current policy?",
+      "as_of_date": null,
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v2",
+      "notes": "Superseded-policy check: answer content is the same across v1/v2 but citation must still resolve to the active v2 record, not v1."
+    },
+    {
+      "id": "Q-F1",
+      "test_category": "F",
+      "category_label": "unanswerable",
+      "question": "What is the employee dress code policy?",
+      "as_of_date": null,
+      "expected_outcome": "refusal",
+      "notes": "No document in the KB covers dress code; must refuse rather than guess."
+    },
+    {
+      "id": "Q-F2",
+      "test_category": "F",
+      "category_label": "unanswerable",
+      "question": "What is the store's Wi-Fi password?",
+      "as_of_date": null,
+      "expected_outcome": "refusal",
+      "notes": "Not operational-policy content and not in the KB; must refuse."
+    },
+    {
+      "id": "Q-G1",
+      "test_category": "G",
+      "category_label": "ambiguous",
+      "question": "What's the policy?",
+      "as_of_date": null,
+      "expected_outcome": "refusal_or_clarify",
+      "notes": "Too vague to route confidently to one document; refusal (or a request for clarification) is acceptable. Not included in strict accuracy scoring — logged for manual review."
+    },
+    {
+      "id": "Q-G2",
+      "test_category": "G",
+      "category_label": "ambiguous",
+      "question": "Can I get a discount?",
+      "as_of_date": null,
+      "expected_outcome": "refusal_or_clarify",
+      "notes": "Ambiguous which promotion is meant. Not included in strict accuracy scoring — logged for manual review."
+    },
+    {
+      "id": "Q-H1",
+      "test_category": "H",
+      "category_label": "historical_date",
+      "question": "What was the return policy in February 2023?",
+      "as_of_date": "2023-02-01",
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v1",
+      "notes": "Historical-date resolution: must cite v1 (effective 2023-01-01 to 2024-05-31), not the current v2."
+    },
+    {
+      "id": "Q-H2",
+      "test_category": "H",
+      "category_label": "historical_date",
+      "question": "What was the return policy on 2024-03-01?",
+      "as_of_date": "2024-03-01",
+      "expected_outcome": "answer",
+      "expected_document_title": "Return Policy",
+      "expected_version": "v1",
+      "notes": "v2 is not effective until 2024-06-01, so this date still falls under v1."
+    },
+    {
+      "id": "Q-I1",
+      "test_category": "I",
+      "category_label": "cross_sub_corpus",
+      "question": "If I return an item I bought using a coupon, do I get the discount amount back too?",
+      "as_of_date": null,
+      "expected_outcome": "answer_or_refusal_acceptable",
+      "notes": "Spans Promotions and Procedures; no document explicitly covers this combined scenario. A refusal is a reasonable outcome; an answer citing Return Policy and/or Store Promotions is also acceptable. Not included in strict accuracy scoring — logged for manual review."
+    },
+    {
+      "id": "Q-I2",
+      "test_category": "I",
+      "category_label": "cross_sub_corpus",
+      "question": "Are there safety rules for handling items that customers return?",
+      "as_of_date": null,
+      "expected_outcome": "answer_or_refusal_acceptable",
+      "notes": "Spans Safety and Procedures; no document explicitly covers returned-item safety handling. A refusal is expected but not scored strictly — logged for manual review."
+    }
+  ]
+}
