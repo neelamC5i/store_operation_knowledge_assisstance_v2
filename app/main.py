@@ -6,7 +6,7 @@ from app.auth import authenticate
 from app.storage.sqlite_db import init_db
 from app.ui import admin_view, employee_view
 
-st.set_page_config(page_title="Store Operations Knowledge Assistant", page_icon="🗂️")
+st.set_page_config(page_title="Store Operations Knowledge Assistant", page_icon="🗂️", layout="wide")
 
 init_db()
 
@@ -35,16 +35,10 @@ def main() -> None:
         login_form()
         return
 
-    with st.sidebar:
-        st.write(f"**{user.username}** ({user.role})")
-        if st.button("Log out"):
-            st.session_state.user = None
-            st.rerun()
-
     if user.role == "admin":
-        admin_view.render(user.username)
+        admin_view.render(user.username, user.role)
     else:
-        employee_view.render(user.username)
+        employee_view.render(user.username, user.role)
 
 
 main()

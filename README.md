@@ -13,7 +13,18 @@ cp .env.example .env    # then set GROQ_API_KEY (default provider)
 
 ## Run
 
+Run from the project root, with the project root on `PYTHONPATH` (Streamlit puts
+`app/`'s own folder on `sys.path`, not the repo root, which otherwise breaks the
+`from app.* import ...` absolute imports with `ModuleNotFoundError: No module named 'app'`):
+
 ```bash
+# macOS/Linux
+PYTHONPATH=. streamlit run app/main.py
+```
+
+```powershell
+# Windows PowerShell
+$env:PYTHONPATH = "."
 streamlit run app/main.py
 ```
 

@@ -11,8 +11,11 @@ from app.core.logging import get_logger
 from app.generation.response_generator import generate
 from app.llm.provider_interface import get_provider
 from app.storage import conversation_repo
+from app.ui.layout import NavItem, render_header, render_sidebar
 
 logger = get_logger(__name__)
+
+_NAV_ITEMS = [NavItem("Assistant", ":material/chat:")]
 
 
 def _citation_to_dict(citation) -> dict:
@@ -47,8 +50,11 @@ def _render_feedback(msg: dict) -> None:
         st.toast("Thanks for the feedback!")
 
 
-def render(username: str) -> None:
-    st.header("Store Operations Assistant")
+def render(username: str, role: str = "employee") -> None:
+    render_sidebar(_NAV_ITEMS, "employee_nav", username, role)
+    render_header(username, role)
+
+    st.subheader("Store Operations Assistant")
     st.caption(f"Signed in as {username}")
 
     if "employee_session_id" not in st.session_state:

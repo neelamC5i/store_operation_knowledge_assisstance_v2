@@ -1,184 +1,278 @@
-"""Admin screens: upload, metadata review/approve, version history, KB dashboard
-(FR-001–FR-018, FR-050)."""
-import tempfile
-from pathlib import Path
+"""Admin dashboard UI (display-only, dummy data) — mirrors the Dashboard / Documents
+upload / Knowledge Base mockups. UI-only pass: no backend wiring, all data is dummy
+and lives in session state purely so the screens look alive when clicked through."""
+from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 
-from app.core.logging import get_logger
-from app.ingestion import pipeline
-from app.ingestion.extraction import extract_text
-from app.ingestion.metadata_extraction import propose_metadata
-from app.ingestion.validation import validate_upload
-from app.llm.provider_interface import get_provider
-from app.storage import documents_repo
-from app.storage.file_storage import save_original
+from app.ui.layout import NavItem, render_footer, render_header, render_sidebar
 
-logger = get_logger(__name__)
+_NAV_ITEMS = [
+    NavItem("Dashboard", ":material/dashboard:"),
+    NavItem("Documents", ":material/description:"),
+    NavItem("Knowledge Base", ":material/menu_book:"),
+    NavItem("Users", ":material/group:"),
+    NavItem("Settings", ":material/settings:"),
+]
 
-_CATEGORIES = ["Procedures", "Promotions", "Safety", "Unknown"]
+_CATEGORIES = ["Policies", "HR", "Product", "IT", "Marketing", "Support", "Safety", "Promotions"]
+
+_STATUS_COLOR = {"Active": "green", "Superseded": "violet", "Failed": "red", "Pending": "orange"}
+
+_TYPE_ICON = {
+    "PDF": (":material/picture_as_pdf:", "red"),
+    "DOCX": (":material/description:", "blue"),
+    "TXT": (":material/article:", "gray"),
+    "CSV": (":material/table_chart:", "green"),
+    "XLSX": (":material/table_chart:", "green"),
+    "PPTX": (":material/slideshow:", "orange"),
+}
+
+_DUMMY_DOCUMENTS = [
+    ("Return Policy", "PDF", "Policies", "v2.1", "Aug 28, 2025 10:24 AM", "Active"),
+    ("Employee Handbook", "DOCX", "HR", "v1.3", "Aug 27, 2025 03:15 PM", "Active"),
+    ("Product Guidelines", "PDF", "Product", "v1.0", "Aug 26, 2025 11:40 AM", "Active"),
+    ("HR Policies", "DOCX", "HR", "v3.0", "Aug 25, 2025 02:30 PM", "Superseded"),
+    ("IT Security Policy", "PDF", "IT", "v1.0", "Aug 24, 2025 09:12 AM", "Active"),
+    ("Marketing Strategy", "PDF", "Marketing", "v1.0", "Aug 23, 2025 01:20 PM", "Active"),
+    ("Customer Support Guide", "PDF", "Support", "v2.0", "Aug 22, 2025 11:05 AM", "Failed"),
+    ("Store Safety Checklist", "PDF", "Safety", "v1.4", "Aug 21, 2025 04:50 PM", "Active"),
+    ("Summer Promotions", "DOCX", "Promotions", "v1.1", "Aug 20, 2025 09:30 AM", "Pending"),
+    ("Onboarding Guide", "PDF", "HR", "v1.0", "Aug 19, 2025 12:10 PM", "Active"),
+    ("Refund Procedure", "PDF", "Policies", "v1.2", "Aug 18, 2025 03:45 PM", "Active"),
+    ("Inventory Audit SOP", "DOCX", "Product", "v2.0", "Aug 17, 2025 10:05 AM", "Active"),
+    ("Fire Drill Procedure", "PDF", "Safety", "v1.0", "Aug 16, 2025 02:00 PM", "Active"),
+    ("POS Troubleshooting", "PDF", "IT", "v1.1", "Aug 15, 2025 11:25 AM", "Active"),
+    ("Holiday Promotions", "DOCX", "Promotions", "v1.0", "Aug 14, 2025 09:50 AM", "Superseded"),
+    ("Visual Merchandising", "PDF", "Marketing", "v1.0", "Aug 13, 2025 01:15 PM", "Active"),
+    ("Customer Escalation Flow", "PDF", "Support", "v1.3", "Aug 12, 2025 04:20 PM", "Active"),
+    ("New Hire Checklist", "DOCX", "HR", "v1.0", "Aug 11, 2025 10:40 AM", "Active"),
+    ("Price Adjustment Policy", "PDF", "Policies", "v1.1", "Aug 10, 2025 03:05 PM", "Active"),
+    ("Data Handling Policy", "PDF", "IT", "v2.0", "Aug 9, 2025 09:15 AM", "Superseded"),
+    ("Warehouse Safety Rules", "PDF", "Safety", "v1.0", "Aug 8, 2025 02:35 PM", "Active"),
+    ("Loyalty Program Guide", "DOCX", "Marketing", "v1.0", "Aug 7, 2025 11:50 AM", "Active"),
+    ("Support Escalation SLA", "PDF", "Support", "v1.0", "Aug 6, 2025 01:30 PM", "Active"),
+    ("Back-to-School Promotions", "PDF", "Promotions", "v1.0", "Aug 5, 2025 10:00 AM", "Pending"),
+]
+
+_ACTIVITY_DATA = pd.DataFrame(
+    {
+        "Uploaded": [5, 8, 6, 9, 14, 16, 11, 13],
+        "Updated": [2, 4, 3, 6, 8, 11, 7, 9],
+    },
+    index=["Aug 22", "Aug 23", "Aug 24", "Aug 25", "Aug 26", "Aug 27", "Aug 28", "Aug 29"],
+)
 
 
-def _process_upload(uploaded_file, title: str) -> None:
-    suffix = Path(uploaded_file.name).suffix
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded_file.getvalue())
-        temp_path = tmp.name
-
-    validation = validate_upload(temp_path, uploaded_file.name)
-    if not validation.ok:
-        st.error(validation.error)
-        Path(temp_path).unlink(missing_ok=True)
-        return
-
-    try:
-        extracted = extract_text(temp_path, uploaded_file.name)
-        if not extracted.full_text.strip():
-            st.error("No extractable text was found in this file.")
-            Path(temp_path).unlink(missing_ok=True)
-            return
-
-        draft = propose_metadata(extracted.full_text, uploaded_file.name, get_provider())
-    except Exception:  # noqa: BLE001 — FR-050: a clear, non-technical message to the Admin
-        logger.exception("Extraction/metadata proposal failed for %s", uploaded_file.name)
-        st.error(
-            "Something went wrong while reading this document or contacting the metadata "
-            "service (check your GROQ_API_KEY/connection). The file was not added — please try again."
-        )
-        Path(temp_path).unlink(missing_ok=True)
-        return
-
-    st.session_state.pending_upload = {
-        "temp_path": temp_path,
-        "filename": uploaded_file.name,
-        "title": title,
-        "draft": draft,
-    }
+def _ensure_state() -> None:
+    st.session_state.setdefault(
+        "admin_documents",
+        [
+            {"title": t, "type": ty, "category": c, "version": v, "uploaded_on": d, "status": s}
+            for t, ty, c, v, d, s in _DUMMY_DOCUMENTS
+        ],
+    )
 
 
-def _render_upload_form() -> None:
-    st.subheader("Upload a Document")
-    with st.form("upload_form"):
-        title = st.text_input("Document Title (e.g. 'Return Policy')")
-        uploaded_file = st.file_uploader("File", type=["pdf", "docx", "txt", "csv"])
-        submitted = st.form_submit_button("Process Upload")
-    if submitted:
-        if not title.strip():
-            st.error("Please provide a document title.")
-        elif uploaded_file is None:
-            st.error("Please choose a file.")
+def _status_counts(documents: list[dict]) -> dict[str, int]:
+    counts = {"Active": 0, "Superseded": 0, "Failed/Pending": 0}
+    for doc in documents:
+        if doc["status"] in ("Failed", "Pending"):
+            counts["Failed/Pending"] += 1
         else:
-            _process_upload(uploaded_file, title.strip())
+            counts[doc["status"]] += 1
+    return counts
+
+
+def _doc_label(doc: dict) -> str:
+    icon, color = _TYPE_ICON.get(doc["type"], (":material/draft:", "gray"))
+    return f":{color}[{icon}] **{doc['title']}**"
+
+
+def _render_document_row(doc: dict, show_category: bool = False) -> None:
+    with st.container(border=True):
+        cols = st.columns([3, 1.4, 1.6, 1] if not show_category else [2.4, 1.2, 1, 1.6, 1])
+        cols[0].markdown(_doc_label(doc))
+        if show_category:
+            cols[1].write(doc["category"])
+            cols[2].write(doc["version"])
+            cols[3].write(doc["uploaded_on"])
+            cols[4].badge(doc["status"], color=_STATUS_COLOR[doc["status"]])
+        else:
+            cols[1].write(doc["type"])
+            cols[2].write(doc["uploaded_on"])
+            cols[3].badge(doc["status"], color=_STATUS_COLOR[doc["status"]])
+
+
+def _render_dashboard(username: str) -> None:
+    st.subheader(f"Good Morning, {username.title()} :material/waving_hand:")
+    st.caption("Here's what's happening with your knowledge base today.")
+
+    documents = st.session_state.admin_documents
+    counts = _status_counts(documents)
+    total = len(documents)
+
+    with st.container(horizontal=True):
+        st.metric("Total Documents", total, "+12%", border=True, icon=":material/description:")
+        st.metric("Active Versions", counts["Active"], "+20%", border=True, icon=":material/check_circle:")
+        st.metric(
+            "Superseded Versions", counts["Superseded"], "-33%", border=True,
+            icon=":material/sync_alt:",
+        )
+        st.metric(
+            "Failed/Pending", counts["Failed/Pending"], "-50%", border=True,
+            icon=":material/error:",
+        )
+    st.caption("vs. last 7 days")
+
+    col1, col2 = st.columns([1.6, 1])
+    with col1:
+        with st.container(border=True):
+            header_col, filter_col = st.columns([3, 1])
+            header_col.markdown("**:material/calendar_month: Document Activity**")
+            filter_col.selectbox(
+                "Range", ["Last 7 days", "Last 30 days", "Last 90 days"],
+                label_visibility="collapsed", key="activity_range",
+            )
+            st.line_chart(_ACTIVITY_DATA, color=["#4F7CFF", "#9B6BFF"])
+
+    with col2:
+        with st.container(border=True):
+            title_col, link_col = st.columns([2, 1])
+            title_col.markdown("**Recent Documents**")
+            link_col.button("View all", key="view_all_recent", type="tertiary")
+            for doc in documents[:5]:
+                _render_document_row(doc)
+
+
+def _render_documents(username: str) -> None:
+    st.subheader("Upload Document")
+
+    with st.container(border=True):
+        uploaded_file = st.file_uploader(
+            "Drag & drop your file here, or click to browse",
+            type=["pdf", "docx", "txt", "csv", "xlsx", "pptx"],
+        )
+        st.caption("Supported formats: PDF, DOCX, TXT, CSV, XLSX, PPTX · Max file size: 50 MB")
+
+    st.markdown("**Upload Details**")
+    with st.form("dummy_upload_form", border=False):
+        col1, col2 = st.columns(2)
+        title = col1.text_input("Document Title", placeholder="Enter document title")
+        category = col2.selectbox("Category", _CATEGORIES)
+        description = st.text_area("Description (optional)", placeholder="Add a short description")
+        submitted = st.form_submit_button("Upload Document", type="primary")
+
+    if submitted:
+        if not uploaded_file or not title.strip():
+            st.error("Please choose a file and provide a document title.")
+        else:
+            suffix = uploaded_file.name.rsplit(".", 1)[-1].upper()
+            st.session_state.admin_documents.insert(
+                0,
+                {
+                    "title": title.strip(),
+                    "type": suffix,
+                    "category": category,
+                    "version": "v1.0",
+                    "uploaded_on": datetime.now().strftime("%b %d, %Y %I:%M %p"),
+                    "status": "Pending",
+                },
+            )
+            st.success(f"'{title.strip()}' uploaded — it now shows up in the Knowledge Base as Pending.")
+
+
+def _render_knowledge_base(username: str) -> None:
+    documents = st.session_state.admin_documents
+    counts = _status_counts(documents)
+
+    header_col, button_col = st.columns([3, 1])
+    with header_col:
+        st.subheader("Knowledge Base")
+        st.caption("Manage and organize your knowledge base documents.")
+    with button_col:
+        st.write("")
+        if st.button("Upload Document", icon=":material/upload:", type="primary", width="stretch"):
+            st.session_state.admin_nav = "Documents"
             st.rerun()
 
-
-def _render_review_form() -> None:
-    pending = st.session_state.pending_upload
-    draft = pending["draft"]
-    title = pending["title"]
-
-    st.subheader("Review Extracted Metadata")
-    st.caption(f"File: {pending['filename']}")
-
-    if draft.prompt_injection_suspected:
-        st.warning(
-            "This document contains text resembling an instruction-override attempt "
-            "(e.g. 'ignore previous instructions'). Review its content carefully before approving."
+    filter_col, search_col = st.columns([2, 1.3])
+    with filter_col:
+        choice = st.segmented_control(
+            "Filter",
+            [
+                f"All ({len(documents)})",
+                f"Active ({counts['Active']})",
+                f"Superseded ({counts['Superseded']})",
+                f"Failed/Pending ({counts['Failed/Pending']})",
+            ],
+            default=f"All ({len(documents)})",
+            label_visibility="collapsed",
         )
-    if draft.low_confidence:
-        st.warning("One or more fields could not be confidently extracted — please verify them.")
-
-    existing_doc = documents_repo.get_document_by_title(title)
-    if existing_doc:
-        active_version = documents_repo.get_active_version(existing_doc.id)
-        if active_version:
-            st.info(
-                f"An active version of '{title}' already exists "
-                f"(version {active_version.version}, effective {active_version.effective_from}). "
-                "Approving this upload will supersede it."
-            )
-
-    with st.form("review_form"):
-        category = st.selectbox(
-            "Category", _CATEGORIES, index=_CATEGORIES.index(draft.category)
+    with search_col:
+        search = st.text_input(
+            "Search", placeholder="Search documents...",
+            icon=":material/search:", label_visibility="collapsed",
         )
-        doc_type = st.text_input("Document Type", value=draft.doc_type)
-        version = st.text_input("Version", value=draft.version)
-        effective_from = st.date_input("Effective From", value=draft.effective_from)
-        description = st.text_area("Description", value=draft.description)
 
-        col1, col2 = st.columns(2)
-        approve = col1.form_submit_button("Approve", type="primary")
-        reject = col2.form_submit_button("Reject")
+    filtered = documents
+    if choice and choice.startswith("Active"):
+        filtered = [d for d in documents if d["status"] == "Active"]
+    elif choice and choice.startswith("Superseded"):
+        filtered = [d for d in documents if d["status"] == "Superseded"]
+    elif choice and choice.startswith("Failed/Pending"):
+        filtered = [d for d in documents if d["status"] in ("Failed", "Pending")]
+    if search:
+        filtered = [d for d in filtered if search.lower() in d["title"].lower()]
 
-    if approve:
-        document_id = existing_doc.id if existing_doc else documents_repo.create_document(title, category)
-        version_id = documents_repo.create_pending_version(
-            document_id=document_id,
-            version=version,
-            effective_from=effective_from,
-            description=description,
-            extracted_by=draft.extracted_by,
-            prompt_injection_flag=draft.prompt_injection_suspected,
+    header = st.columns([2.4, 1.2, 1, 1.6, 1])
+    header[0].caption("Title")
+    header[1].caption("Category")
+    header[2].caption("Version")
+    header[3].caption("Uploaded On")
+    header[4].caption("Status")
+
+    page_size = 10
+    st.session_state.setdefault("kb_page", 1)
+    total_pages = max(1, -(-len(filtered) // page_size))
+    page = min(st.session_state.kb_page, total_pages)
+    start = (page - 1) * page_size
+    page_rows = filtered[start : start + page_size]
+
+    if not page_rows:
+        st.caption("No documents match this filter.")
+    for doc in page_rows:
+        _render_document_row(doc, show_category=True)
+
+    if total_pages > 1:
+        st.caption(
+            f"Showing {start + 1}-{start + len(page_rows)} of {len(filtered)} documents"
         )
-        file_path = save_original(pending["temp_path"], version_id, pending["filename"])
-        documents_repo.set_version_file_path(version_id, file_path)
-        Path(pending["temp_path"]).unlink(missing_ok=True)
-        del st.session_state.pending_upload
-
-        with st.spinner("Chunking, embedding, and indexing…"):
-            success, message = pipeline.process_pending_version(version_id)
-        if success:
-            st.success(f"'{title}' (version {version}) approved. {message}")
-        else:
-            st.error(f"'{title}' (version {version}) approved but indexing failed: {message}")
-        st.rerun()
-
-    if reject:
-        Path(pending["temp_path"]).unlink(missing_ok=True)
-        del st.session_state.pending_upload
-        st.info("Upload discarded — not added to the knowledge base.")
-        st.rerun()
+        nav_cols = st.columns(total_pages)
+        for i, col in enumerate(nav_cols, start=1):
+            if col.button(str(i), key=f"kb_page_{i}", type="primary" if i == page else "secondary"):
+                st.session_state.kb_page = i
+                st.rerun()
 
 
-def _render_kb_dashboard() -> None:
-    st.subheader("Knowledge Base Health")
-    stats = documents_repo.get_kb_stats()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Documents", stats["total_documents"])
-    col2.metric("Active versions", stats["status_counts"].get("active", 0))
-    col3.metric("Superseded versions", stats["status_counts"].get("superseded", 0))
-    col4.metric("Failed/pending", stats["status_counts"].get("failed", 0) + stats["status_counts"].get("pending", 0))
-    if stats["category_counts"]:
-        st.caption(" · ".join(f"{cat}: {count}" for cat, count in stats["category_counts"].items()))
+def _render_placeholder(title: str) -> None:
+    st.subheader(title)
+    st.info(f"{title} is not part of this UI pass yet — coming soon.")
 
 
-def _render_version_history() -> None:
-    st.subheader("Document & Version History")
-    documents = documents_repo.list_all_documents()
-    if not documents:
-        st.caption("No documents uploaded yet.")
-        return
-    for doc in documents:
-        with st.expander(f"{doc.title} ({doc.category})"):
-            for version in documents_repo.list_versions(doc.id):
-                st.write(
-                    f"**{version.version}** — status: `{version.status}` — "
-                    f"effective {version.effective_from} to {version.effective_to or 'present'}"
-                )
+def render(username: str, role: str = "admin") -> None:
+    _ensure_state()
+    nav = render_sidebar(_NAV_ITEMS, "admin_nav", username, role)
+    render_header(username, role)
 
-
-def render(username: str) -> None:
-    st.header("Store Admin")
-    st.caption(f"Signed in as {username}")
-
-    _render_kb_dashboard()
-    st.divider()
-
-    if "pending_upload" in st.session_state:
-        _render_review_form()
+    if nav == "Dashboard":
+        _render_dashboard(username)
+    elif nav == "Documents":
+        _render_documents(username)
+    elif nav == "Knowledge Base":
+        _render_knowledge_base(username)
     else:
-        _render_upload_form()
+        _render_placeholder(nav)
 
-    st.divider()
-    _render_version_history()
+    render_footer()
